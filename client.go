@@ -12,11 +12,13 @@ import (
 
 // Client configuration options
 type Options struct {
-	URL         *url.URL     // URL to the CAS service
-	Store       TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
-	Client      *http.Client // Custom http client to allow options for http connections
-	SendService bool         // Custom sendService to determine whether you need to send service param
-	URLScheme 	URLScheme	 // Custom url scheme, can be used to modify the request urls for the client
+	URL          *url.URL     // URL to the CAS service
+	Store        TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
+	Client       *http.Client // Custom http client to allow options for http connections
+	SendService  bool         // Custom sendService to determine whether you need to send service param
+	URLScheme    URLScheme    // Custom url scheme, can be used to modify the request urls for the client
+	LogoutPath   string       // Custom logout uri - if set if will be used to check if request is a logout request
+	LogoutMethod string       // Custom logout method - if set if will be used to check if a request is a logout request
 }
 
 // Client implements the main protocol
@@ -30,6 +32,9 @@ type Client struct {
 	sendService bool
 
 	stValidator *ServiceTicketValidator
+
+	logoutPath   string
+	logoutMethod string
 }
 
 // NewClient creates a Client with the provided Options.
@@ -60,26 +65,30 @@ func NewClient(options *Options) *Client {
 	}
 
 	return &Client{
-		tickets:     tickets,
-		client:      client,
-		urlScheme:   urlScheme,
-		sessions:    make(map[string]string),
-		sendService: options.SendService,
-		stValidator: NewServiceTicketValidator(client, urlScheme),
+		tickets:      tickets,
+		client:       client,
+		urlScheme:    urlScheme,
+		sessions:     make(map[string]string),
+		sendService:  options.SendService,
+		stValidator:  NewServiceTicketValidator(client, urlScheme),
+		logoutPath:   options.LogoutPath,
+		logoutMethod: options.LogoutMethod,
 	}
 }
 
-// Handle wraps a http.Handler to provide CAS authentication for the handler.
-func (c *Client) Handle(h http.Handler) http.Handler {
+// CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
+func (c *Client) CreateHandler(h http.Handler) http.Handler {
 	return &clientHandler{
-		c: c,
-		h: h,
+		c:            c,
+		h:            h,
+		logoutPath:   c.logoutPath,
+		logoutMethod: c.logoutMethod,
 	}
 }
 
 // HandleFunc wraps a function to provide CAS authentication for the handler function.
 func (c *Client) HandleFunc(h func(http.ResponseWriter, *http.Request)) http.Handler {
-	return c.Handle(http.HandlerFunc(h))
+	return c.CreateHandler(http.HandlerFunc(h))
 }
 
 // requestURL determines an absolute URL from the http.Request.

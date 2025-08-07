@@ -13,8 +13,10 @@ const (
 
 // clientHandler handles CAS Protocol HTTP requests
 type clientHandler struct {
-	c *Client
-	h http.Handler
+	c            *Client
+	h            http.Handler
+	logoutPath   string
+	logoutMethod string
 }
 
 // ServeHTTP handles HTTP requests, processes CAS requests
@@ -26,7 +28,7 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	setClient(r, ch.c)
 
-	if isSingleLogoutRequest(r) {
+	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
 		return
 	}
@@ -39,7 +41,15 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // isSingleLogoutRequest determines if the http.Request is a CAS Single Logout Request.
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
-func isSingleLogoutRequest(r *http.Request) bool {
+func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
+	if ch.logoutMethod != "" && ch.logoutMethod != r.Method {
+		return false
+	}
+
+	if ch.logoutPath != "" && ch.logoutPath != r.URL.Path {
+		return false
+	}
+
 	if r.Method != "POST" {
 		return false
 	}
