@@ -42,12 +42,18 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
 func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
-	if ch.logoutMethod != "" && ch.logoutMethod != r.Method {
-		return false
+	matchesMethod := true
+	matchesPath := true
+	if ch.logoutMethod != "" {
+		matchesMethod = ch.logoutMethod != r.Method
 	}
 
 	if ch.logoutPath != "" && ch.logoutPath != r.URL.Path {
-		return false
+		matchesPath = ch.logoutPath != r.URL.Path
+	}
+
+	if ch.logoutPath != "" || ch.logoutMethod != "" {
+		return matchesPath && matchesMethod
 	}
 
 	if r.Method != "POST" {
