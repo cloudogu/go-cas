@@ -12,13 +12,12 @@ import (
 
 // Client configuration options
 type Options struct {
-	URL          *url.URL     // URL to the CAS service
-	Store        TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
-	Client       *http.Client // Custom http client to allow options for http connections
-	SendService  bool         // Custom sendService to determine whether you need to send service param
-	URLScheme    URLScheme    // Custom url scheme, can be used to modify the request urls for the client
-	LogoutPath   string       // Custom logout uri - if set if will be used to check if request is a logout request
-	LogoutMethod string       // Custom logout method - if set if will be used to check if a request is a logout request
+	URL             *url.URL                   // URL to the CAS service
+	Store           TicketStore                // Custom TicketStore, if nil a MemoryStore will be used
+	Client          *http.Client               // Custom http client to allow options for http connections
+	SendService     bool                       // Custom sendService to determine whether you need to send service param
+	URLScheme       URLScheme                  // Custom url scheme, can be used to modify the request urls for the client
+	isLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
 }
 
 // Client implements the main protocol
@@ -33,8 +32,7 @@ type Client struct {
 
 	stValidator *ServiceTicketValidator
 
-	logoutPath   string
-	logoutMethod string
+	isLogoutRequest func(r *http.Request) bool
 }
 
 // NewClient creates a Client with the provided Options.
@@ -65,24 +63,22 @@ func NewClient(options *Options) *Client {
 	}
 
 	return &Client{
-		tickets:      tickets,
-		client:       client,
-		urlScheme:    urlScheme,
-		sessions:     make(map[string]string),
-		sendService:  options.SendService,
-		stValidator:  NewServiceTicketValidator(client, urlScheme),
-		logoutPath:   options.LogoutPath,
-		logoutMethod: options.LogoutMethod,
+		tickets:         tickets,
+		client:          client,
+		urlScheme:       urlScheme,
+		sessions:        make(map[string]string),
+		sendService:     options.SendService,
+		stValidator:     NewServiceTicketValidator(client, urlScheme),
+		isLogoutRequest: options.isLogoutRequest,
 	}
 }
 
 // CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
 func (c *Client) CreateHandler(h http.Handler) http.Handler {
 	return &clientHandler{
-		c:            c,
-		h:            h,
-		logoutPath:   c.logoutPath,
-		logoutMethod: c.logoutMethod,
+		c:               c,
+		h:               h,
+		isLogoutRequest: c.isLogoutRequest,
 	}
 }
 

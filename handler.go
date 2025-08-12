@@ -2,9 +2,8 @@ package cas
 
 import (
 	"fmt"
-	"net/http"
-
 	"github.com/golang/glog"
+	"net/http"
 )
 
 const (
@@ -13,10 +12,9 @@ const (
 
 // clientHandler handles CAS Protocol HTTP requests
 type clientHandler struct {
-	c            *Client
-	h            http.Handler
-	logoutPath   string
-	logoutMethod string
+	c               *Client
+	h               http.Handler
+	isLogoutRequest func(r *http.Request) bool
 }
 
 // ServeHTTP handles HTTP requests, processes CAS requests
@@ -30,6 +28,7 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
+		ch.c.RedirectToLogout(w, r)
 		return
 	}
 
@@ -42,18 +41,8 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
 func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
-	matchesMethod := true
-	matchesPath := true
-	if ch.logoutMethod != "" {
-		matchesMethod = ch.logoutMethod != r.Method
-	}
-
-	if ch.logoutPath != "" && ch.logoutPath != r.URL.Path {
-		matchesPath = ch.logoutPath != r.URL.Path
-	}
-
-	if ch.logoutPath != "" || ch.logoutMethod != "" {
-		return matchesPath && matchesMethod
+	if ch.isLogoutRequest != nil {
+		return ch.isLogoutRequest(r)
 	}
 
 	if r.Method != "POST" {
@@ -78,12 +67,12 @@ func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Requ
 	logoutRequest, err := parseLogoutRequest([]byte(rawXML))
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		glog.Info(err.Error())
 		return
 	}
 
 	if err := ch.c.tickets.Delete(logoutRequest.SessionIndex); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		glog.Info(err.Error())
 		return
 	}
 
