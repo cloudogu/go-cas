@@ -17,7 +17,7 @@ type Options struct {
 	Client          *http.Client               // Custom http client to allow options for http connections
 	SendService     bool                       // Custom sendService to determine whether you need to send service param
 	URLScheme       URLScheme                  // Custom url scheme, can be used to modify the request urls for the client
-	isLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
+	IsLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
 }
 
 // Client implements the main protocol
@@ -69,7 +69,7 @@ func NewClient(options *Options) *Client {
 		sessions:        make(map[string]string),
 		sendService:     options.SendService,
 		stValidator:     NewServiceTicketValidator(client, urlScheme),
-		isLogoutRequest: options.isLogoutRequest,
+		isLogoutRequest: options.IsLogoutRequest,
 	}
 }
 
