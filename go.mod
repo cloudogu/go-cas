@@ -1,4 +1,4 @@
-module github.com/cloudogu/co-gas
+module github.com/cloudogu/go-cas
 
 go 1.24.4
 
