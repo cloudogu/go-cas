@@ -24,6 +24,8 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		glog.Infof("cas: handling %v request for %v", r.Method, r.URL)
 	}
 
+	setClient(r, ch.c)
+
 	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
 		ch.c.RedirectToLogout(w, r)
