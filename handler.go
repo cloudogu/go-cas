@@ -26,6 +26,8 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	setClient(r, ch.c)
 
+	ch.c.sessions = map[string]string{}
+
 	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
 		ch.c.RedirectToLogout(w, r)
