@@ -17,10 +17,6 @@ type clientHandler struct {
 	isLogoutRequest func(r *http.Request) bool
 }
 
-func (ch *clientHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	ch.c.clearSession(w, r)
-}
-
 // ServeHTTP handles HTTP requests, processes CAS requests
 // and passes requests up to its child http.Handler.
 func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

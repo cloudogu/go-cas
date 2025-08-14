@@ -73,6 +73,10 @@ func NewClient(options *Options) *Client {
 	}
 }
 
+func (c *Client) Logout(w http.ResponseWriter, r *http.Request) {
+	c.clearSession(w, r)
+}
+
 // CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
 func (c *Client) CreateHandler(h http.Handler) http.Handler {
 	return &clientHandler{
