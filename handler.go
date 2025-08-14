@@ -17,16 +17,16 @@ type clientHandler struct {
 	isLogoutRequest func(r *http.Request) bool
 }
 
+func (ch *clientHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	ch.c.clearSession(w, r)
+}
+
 // ServeHTTP handles HTTP requests, processes CAS requests
 // and passes requests up to its child http.Handler.
 func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if glog.V(2) {
 		glog.Infof("cas: handling %v request for %v", r.Method, r.URL)
 	}
-
-	setClient(r, ch.c)
-
-	ch.c.sessions = map[string]string{}
 
 	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
