@@ -237,16 +237,6 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 			setAuthenticationResponse(r, t)
 			return
-		} else {
-			if glog.V(2) {
-				glog.Infof("Ticket %v not in %T: %v", s, c.tickets, err)
-			}
-
-			if glog.V(1) {
-				glog.Infof("Clearing ticket %s, no longer exists in ticket store", s)
-			}
-
-			clearCookie(w, cookie)
 		}
 	}
 
@@ -268,24 +258,20 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			setFirstAuthenticatedRequest(r, true)
 			setAuthenticationResponse(r, t)
 			return
-		} else {
-			if glog.V(2) {
-				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
-			}
-
-			if glog.V(1) {
-				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
-			}
-
-			clearCookie(w, cookie)
 		}
 	}
+
+	fmt.Println("Clearing cookie as it was not found...")
+
+	clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
 func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil {
+		fmt.Println("===========================")
+		fmt.Println("setting new cookie")
 		// NOTE: Intentionally not enabling HttpOnly so the cookie can
 		//       still be used by Ajax requests.
 		c = &http.Cookie{
@@ -293,6 +279,7 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 			Value:    newSessionId(),
 			MaxAge:   86400,
 			HttpOnly: false,
+			Path:     "/",
 		}
 
 		if glog.V(2) {

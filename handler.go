@@ -1,8 +1,10 @@
 package cas
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/golang/glog"
+	"io"
 	"net/http"
 )
 
@@ -47,9 +49,14 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
 func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
-	if ch.isLogoutRequest != nil {
-		return ch.isLogoutRequest(r)
+	content, err := io.ReadAll(r.Body)
+	if err != nil {
+		panic(err.Error())
 	}
+
+	defer func() {
+		r.Body = io.NopCloser(bytes.NewBuffer(content))
+	}()
 
 	if r.Method != "POST" {
 		return false
