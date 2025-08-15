@@ -26,12 +26,6 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		glog.Infof("cas: handling %v request for %v", r.Method, r.URL)
 	}
 
-	fmt.Println("================\n\n\n")
-	fmt.Println(getCookie(w, r))
-	fmt.Println("=!=!=!=!=!")
-	fmt.Println(ch.c.sessions)
-	fmt.Println("================\n\n\n")
-
 	setClient(r, ch.c)
 
 	if ch.isSingleLogoutRequest(r) {

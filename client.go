@@ -261,8 +261,6 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	fmt.Println("Clearing cookie as it was not found...")
-
 	clearCookie(w, cookie)
 }
 
@@ -270,8 +268,6 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 	c, err := r.Cookie(sessionCookieName)
 	if err != nil {
-		fmt.Println("===========================")
-		fmt.Println("setting new cookie")
 		// NOTE: Intentionally not enabling HttpOnly so the cookie can
 		//       still be used by Ajax requests.
 		c = &http.Cookie{
