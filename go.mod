@@ -1,4 +1,4 @@
-module github.com/cloudogu/go-cas
+module github.com/cloudogu/go-cas/v2
 
 go 1.24.5
 

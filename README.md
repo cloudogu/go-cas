@@ -7,6 +7,11 @@ securing http frontends in golang.
 
 ## Examples and Documentation
 
+Installing goes like this (have your `go.mod` file ready):
+```bash
+go get github.com/cloudogu/go-cas/v2
+```
+
 Documentation is available at: http://godoc.org/gopkg.in/cas.v2
 Examples are included in the documentation but are also available in the
 `_examples` directory.
