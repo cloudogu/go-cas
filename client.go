@@ -75,7 +75,6 @@ func NewClient(options *Options) *Client {
 
 func (c *Client) Logout(w http.ResponseWriter, r *http.Request) {
 	c.clearSession(w, r)
-	c.sessions = map[string]string{}
 }
 
 // CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
@@ -237,6 +236,16 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 			setAuthenticationResponse(r, t)
 			return
+		} else {
+			if glog.V(2) {
+				glog.Infof("Ticket %v not in %T: %v", s, c.tickets, err)
+			}
+
+			if glog.V(1) {
+				glog.Infof("Clearing ticket %s, no longer exists in ticket store", s)
+			}
+
+			clearCookie(w, cookie)
 		}
 	}
 
@@ -246,6 +255,16 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Error validating ticket: %v", err)
 			}
 			return // allow ServeHTTP()
+		} else {
+			if glog.V(2) {
+				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
+			}
+
+			if glog.V(1) {
+				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
+			}
+
+			clearCookie(w, cookie)
 		}
 
 		c.setSession(cookie.Value, ticket)
