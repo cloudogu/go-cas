@@ -10,7 +10,7 @@ import (
 	"github.com/golang/glog"
 )
 
-// Client configuration options
+// Options contain diverse client configuration options.
 type Options struct {
 	URL             *url.URL                   // URL to the CAS service
 	Store           TicketStore                // Custom TicketStore, if nil a MemoryStore will be used

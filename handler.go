@@ -2,8 +2,9 @@ package cas
 
 import (
 	"fmt"
-	"github.com/golang/glog"
 	"net/http"
+
+	"github.com/golang/glog"
 )
 
 const (
@@ -64,20 +65,20 @@ func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
 // performSingleLogout processes a single logout request
 func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Request) {
 	rawXML := r.FormValue("logoutRequest")
-	logoutRequest, err := parseLogoutRequest([]byte(rawXML))
+	logoutReq, err := parseLogoutRequest([]byte(rawXML))
 
 	if err != nil {
-		glog.Info(err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := ch.c.tickets.Delete(logoutRequest.SessionIndex); err != nil {
-		glog.Info(err.Error())
+	if err := ch.c.tickets.Delete(logoutReq.SessionIndex); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	ch.c.deleteSession(logoutRequest.SessionIndex)
+	ch.c.deleteSession(logoutReq.SessionIndex)
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "OK")
+	_, _ = fmt.Fprintln(w, "OK")
 }
