@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v2.2.0] - 2018-05-16
 ### Added
+- Add REST request cache
 
 ## [v2.1.0] 
 This and all previous versions origin from the forked repository.
