@@ -13,8 +13,9 @@ const (
 
 // clientHandler handles CAS Protocol HTTP requests
 type clientHandler struct {
-	c *Client
-	h http.Handler
+	c               *Client
+	h               http.Handler
+	isLogoutRequest func(r *http.Request) bool
 }
 
 // ServeHTTP handles HTTP requests, processes CAS requests
@@ -26,8 +27,9 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	setClient(r, ch.c)
 
-	if isSingleLogoutRequest(r) {
+	if ch.isSingleLogoutRequest(r) {
 		ch.performSingleLogout(w, r)
+		ch.c.RedirectToLogout(w, r)
 		return
 	}
 
@@ -39,7 +41,11 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // isSingleLogoutRequest determines if the http.Request is a CAS Single Logout Request.
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
-func isSingleLogoutRequest(r *http.Request) bool {
+func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
+	if ch.isLogoutRequest != nil {
+		return ch.isLogoutRequest(r)
+	}
+
 	if r.Method != "POST" {
 		return false
 	}
@@ -59,20 +65,20 @@ func isSingleLogoutRequest(r *http.Request) bool {
 // performSingleLogout processes a single logout request
 func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Request) {
 	rawXML := r.FormValue("logoutRequest")
-	logoutRequest, err := parseLogoutRequest([]byte(rawXML))
+	logoutReq, err := parseLogoutRequest([]byte(rawXML))
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err := ch.c.tickets.Delete(logoutRequest.SessionIndex); err != nil {
+	if err := ch.c.tickets.Delete(logoutReq.SessionIndex); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	ch.c.deleteSession(logoutRequest.SessionIndex)
+	ch.c.deleteSession(logoutReq.SessionIndex)
 
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "OK")
+	_, _ = fmt.Fprintln(w, "OK")
 }

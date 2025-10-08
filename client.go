@@ -3,7 +3,6 @@ package cas
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
@@ -11,13 +10,14 @@ import (
 	"github.com/golang/glog"
 )
 
-// Client configuration options
+// Options contain diverse client configuration options.
 type Options struct {
-	URL         *url.URL     // URL to the CAS service
-	Store       TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
-	Client      *http.Client // Custom http client to allow options for http connections
-	SendService bool         // Custom sendService to determine whether you need to send service param
-	URLScheme 	URLScheme	 // Custom url scheme, can be used to modify the request urls for the client
+	URL             *url.URL                   // URL to the CAS service
+	Store           TicketStore                // Custom TicketStore, if nil a MemoryStore will be used
+	Client          *http.Client               // Custom http client to allow options for http connections
+	SendService     bool                       // Custom sendService to determine whether you need to send service param
+	URLScheme       URLScheme                  // Custom url scheme, can be used to modify the request urls for the client
+	IsLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
 }
 
 // Client implements the main protocol
@@ -29,6 +29,10 @@ type Client struct {
 	mu          sync.Mutex
 	sessions    map[string]string
 	sendService bool
+
+	stValidator *ServiceTicketValidator
+
+	isLogoutRequest func(r *http.Request) bool
 }
 
 // NewClient creates a Client with the provided Options.
@@ -59,25 +63,32 @@ func NewClient(options *Options) *Client {
 	}
 
 	return &Client{
-		tickets:     tickets,
-		client:      client,
-		urlScheme:   urlScheme,
-		sessions:    make(map[string]string),
-		sendService: options.SendService,
+		tickets:         tickets,
+		client:          client,
+		urlScheme:       urlScheme,
+		sessions:        make(map[string]string),
+		sendService:     options.SendService,
+		stValidator:     NewServiceTicketValidator(client, urlScheme),
+		isLogoutRequest: options.IsLogoutRequest,
 	}
 }
 
-// Handle wraps a http.Handler to provide CAS authentication for the handler.
-func (c *Client) Handle(h http.Handler) http.Handler {
+func (c *Client) Logout(w http.ResponseWriter, r *http.Request) {
+	c.clearSession(w, r)
+}
+
+// CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
+func (c *Client) CreateHandler(h http.Handler) http.Handler {
 	return &clientHandler{
-		c: c,
-		h: h,
+		c:               c,
+		h:               h,
+		isLogoutRequest: c.isLogoutRequest,
 	}
 }
 
 // HandleFunc wraps a function to provide CAS authentication for the handler function.
 func (c *Client) HandleFunc(h func(http.ResponseWriter, *http.Request)) http.Handler {
-	return c.Handle(http.HandlerFunc(h))
+	return c.CreateHandler(http.HandlerFunc(h))
 }
 
 // requestURL determines an absolute URL from the http.Request.
@@ -140,43 +151,23 @@ func (c *Client) LogoutUrlForRequest(r *http.Request) (string, error) {
 }
 
 // ServiceValidateUrlForRequest determines the CAS serviceValidate URL for the ticket and http.Request.
+// TODO why is this function exposed?
 func (c *Client) ServiceValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
-	u, err := c.urlScheme.ServiceValidate()
-	if err != nil {
-		return "", err
-	}
-
 	service, err := requestURL(r)
 	if err != nil {
 		return "", err
 	}
-
-	q := u.Query()
-	q.Add("service", sanitisedURLString(service))
-	q.Add("ticket", ticket)
-	u.RawQuery = q.Encode()
-
-	return u.String(), nil
+	return c.stValidator.ServiceValidateUrl(service, ticket)
 }
 
 // ValidateUrlForRequest determines the CAS validate URL for the ticket and http.Request.
+// TODO why is this function exposed?
 func (c *Client) ValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
-	u, err := c.urlScheme.Validate()
-	if err != nil {
-		return "", err
-	}
-
 	service, err := requestURL(r)
 	if err != nil {
 		return "", err
 	}
-
-	q := u.Query()
-	q.Add("service", sanitisedURLString(service))
-	q.Add("ticket", ticket)
-	u.RawQuery = q.Encode()
-
-	return u.String(), nil
+	return c.stValidator.ValidateUrl(service, ticket)
 }
 
 // RedirectToLogout replies to the request with a redirect URL to log out of CAS.
@@ -212,132 +203,15 @@ func (c *Client) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // validateTicket performs CAS ticket validation with the given ticket and service.
-//
-// If the request returns a 404 then validateTicketCas1 will be returned.
 func (c *Client) validateTicket(ticket string, service *http.Request) error {
-	if glog.V(2) {
-		serviceUrl, _ := requestURL(service)
-		glog.Infof("Validating ticket %v for service %v", ticket, serviceUrl)
-	}
-
-	u, err := c.ServiceValidateUrlForRequest(ticket, service)
+	serviceUrl, err := requestURL(service)
 	if err != nil {
 		return err
 	}
 
-	r, err := http.NewRequest("GET", u, nil)
+	success, err := c.stValidator.ValidateTicket(serviceUrl, ticket)
 	if err != nil {
 		return err
-	}
-
-	r.Header.Add("User-Agent", "Golang CAS client gopkg.in/cas")
-
-	if glog.V(2) {
-		glog.Infof("Attempting ticket validation with %v", r.URL)
-	}
-
-	resp, err := c.client.Do(r)
-	if err != nil {
-		return err
-	}
-
-	if glog.V(2) {
-		glog.Infof("Request %v %v returned %v",
-			r.Method, r.URL,
-			resp.Status)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		return c.validateTicketCas1(ticket, service)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cas: validate ticket: %v", string(body))
-	}
-
-	if glog.V(2) {
-		glog.Infof("Received authentication response\n%v", string(body))
-	}
-
-	success, err := ParseServiceResponse(body)
-	if err != nil {
-		return err
-	}
-
-	if glog.V(2) {
-		glog.Infof("Parsed ServiceResponse: %#v", success)
-	}
-
-	if err := c.tickets.Write(ticket, success); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// validateTicketCas1 performs CAS protocol 1 ticket validation.
-func (c *Client) validateTicketCas1(ticket string, service *http.Request) error {
-	u, err := c.ValidateUrlForRequest(ticket, service)
-	if err != nil {
-		return err
-	}
-
-	r, err := http.NewRequest("GET", u, nil)
-	if err != nil {
-		return err
-	}
-
-	r.Header.Add("User-Agent", "Golang CAS client gopkg.in/cas")
-
-	if glog.V(2) {
-		glog.Info("Attempting ticket validation with %v", r.URL)
-	}
-
-	resp, err := c.client.Do(r)
-	if err != nil {
-		return err
-	}
-
-	if glog.V(2) {
-		glog.Info("Request %v %v returned %v",
-			r.Method, r.URL,
-			resp.Status)
-	}
-
-	data, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if err != nil {
-		return err
-	}
-
-	body := string(data)
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cas: validate ticket: %v", body)
-	}
-
-	if glog.V(2) {
-		glog.Infof("Received authentication response\n%v", body)
-	}
-
-	if body == "no\n\n" {
-		return nil // not logged in
-	}
-
-	success := &AuthenticationResponse{
-		User: body[4 : len(body)-1],
-	}
-
-	if glog.V(2) {
-		glog.Infof("Parsed ServiceResponse: %#v", success)
 	}
 
 	if err := c.tickets.Write(ticket, success); err != nil {
@@ -381,17 +255,6 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Error validating ticket: %v", err)
 			}
 			return // allow ServeHTTP()
-		}
-
-		c.setSession(cookie.Value, ticket)
-
-		if t, err := c.tickets.Read(ticket); err == nil {
-			if glog.V(1) {
-				glog.Infof("Validated ticket %s for %s", ticket, t.User)
-			}
-
-			setAuthenticationResponse(r, t)
-			return
 		} else {
 			if glog.V(2) {
 				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
@@ -403,7 +266,21 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 			clearCookie(w, cookie)
 		}
+
+		c.setSession(cookie.Value, ticket)
+
+		if t, err := c.tickets.Read(ticket); err == nil {
+			if glog.V(1) {
+				glog.Infof("Validated ticket %s for %s", ticket, t.User)
+			}
+
+			setFirstAuthenticatedRequest(r, true)
+			setAuthenticationResponse(r, t)
+			return
+		}
 	}
+
+	clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
@@ -417,6 +294,7 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 			Value:    newSessionId(),
 			MaxAge:   86400,
 			HttpOnly: false,
+			Path:     "/",
 		}
 
 		if glog.V(2) {
