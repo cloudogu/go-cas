@@ -10,13 +10,14 @@ import (
 	"github.com/golang/glog"
 )
 
-// Client configuration options
+// Options contain diverse client configuration options.
 type Options struct {
-	URL         *url.URL     // URL to the CAS service
-	Store       TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
-	Client      *http.Client // Custom http client to allow options for http connections
-	SendService bool         // Custom sendService to determine whether you need to send service param
-	URLScheme 	URLScheme	 // Custom url scheme, can be used to modify the request urls for the client
+	URL             *url.URL                   // URL to the CAS service
+	Store           TicketStore                // Custom TicketStore, if nil a MemoryStore will be used
+	Client          *http.Client               // Custom http client to allow options for http connections
+	SendService     bool                       // Custom sendService to determine whether you need to send service param
+	URLScheme       URLScheme                  // Custom url scheme, can be used to modify the request urls for the client
+	IsLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
 }
 
 // Client implements the main protocol
@@ -30,6 +31,8 @@ type Client struct {
 	sendService bool
 
 	stValidator *ServiceTicketValidator
+
+	isLogoutRequest func(r *http.Request) bool
 }
 
 // NewClient creates a Client with the provided Options.
@@ -60,26 +63,32 @@ func NewClient(options *Options) *Client {
 	}
 
 	return &Client{
-		tickets:     tickets,
-		client:      client,
-		urlScheme:   urlScheme,
-		sessions:    make(map[string]string),
-		sendService: options.SendService,
-		stValidator: NewServiceTicketValidator(client, urlScheme),
+		tickets:         tickets,
+		client:          client,
+		urlScheme:       urlScheme,
+		sessions:        make(map[string]string),
+		sendService:     options.SendService,
+		stValidator:     NewServiceTicketValidator(client, urlScheme),
+		isLogoutRequest: options.IsLogoutRequest,
 	}
 }
 
-// Handle wraps a http.Handler to provide CAS authentication for the handler.
-func (c *Client) Handle(h http.Handler) http.Handler {
+func (c *Client) Logout(w http.ResponseWriter, r *http.Request) {
+	c.clearSession(w, r)
+}
+
+// CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
+func (c *Client) CreateHandler(h http.Handler) http.Handler {
 	return &clientHandler{
-		c: c,
-		h: h,
+		c:               c,
+		h:               h,
+		isLogoutRequest: c.isLogoutRequest,
 	}
 }
 
 // HandleFunc wraps a function to provide CAS authentication for the handler function.
 func (c *Client) HandleFunc(h func(http.ResponseWriter, *http.Request)) http.Handler {
-	return c.Handle(http.HandlerFunc(h))
+	return c.CreateHandler(http.HandlerFunc(h))
 }
 
 // requestURL determines an absolute URL from the http.Request.
@@ -246,6 +255,16 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Error validating ticket: %v", err)
 			}
 			return // allow ServeHTTP()
+		} else {
+			if glog.V(2) {
+				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
+			}
+
+			if glog.V(1) {
+				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
+			}
+
+			clearCookie(w, cookie)
 		}
 
 		c.setSession(cookie.Value, ticket)
@@ -258,18 +277,10 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			setFirstAuthenticatedRequest(r, true)
 			setAuthenticationResponse(r, t)
 			return
-		} else {
-			if glog.V(2) {
-				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
-			}
-
-			if glog.V(1) {
-				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
-			}
-
-			clearCookie(w, cookie)
 		}
 	}
+
+	clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
@@ -283,6 +294,7 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 			Value:    newSessionId(),
 			MaxAge:   86400,
 			HttpOnly: false,
+			Path:     "/",
 		}
 
 		if glog.V(2) {
