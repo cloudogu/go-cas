@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.3.1] - 2025-10-09
+### Fixed
+- Delete session map to avoid missing cas-session cookie creation 
+
 ## [v2.3.0] - 2025-10-08
 ### Changed
 - this release now officially concurs to the Golang module versioning scheme
