@@ -281,11 +281,12 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			setFirstAuthenticatedRequest(r, true)
 			setAuthenticationResponse(r, t)
 			return
+		} else {
+			glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
+			clearCookie(w, cookie)
+
 		}
 	}
-
-	//glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
-	//clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
