@@ -245,6 +245,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Clearing ticket %s, no longer exists in ticket store", s)
 			}
 
+			glog.Infof("2++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 			clearCookie(w, cookie)
 		}
 	}
@@ -264,6 +265,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
 			}
 
+			glog.Infof("3++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 			clearCookie(w, cookie)
 		}
 
@@ -280,6 +282,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 	clearCookie(w, cookie)
 }
 
@@ -300,6 +303,8 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 		if glog.V(2) {
 			glog.Infof("Setting %v cookie with value: %v", c.Name, c.Value)
 		}
+
+		glog.Infof("++++++ Setze neuen Cookie %s in req %s", c.Value, r.URL.String())
 
 		r.AddCookie(c) // so we can find it later if required
 		http.SetCookie(w, c)
@@ -325,6 +330,7 @@ func newSessionId() string {
 
 // clearCookie invalidates and removes the cookie from the client.
 func clearCookie(w http.ResponseWriter, c *http.Cookie) {
+	glog.Infof("++++++ Lösche Cookie %s", c.Value)
 	c.MaxAge = -1
 	http.SetCookie(w, c)
 }
@@ -355,6 +361,7 @@ func (c *Client) clearSession(w http.ResponseWriter, r *http.Request) {
 		c.deleteSession(s)
 	}
 
+	glog.Infof("++++++ 1Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 	clearCookie(w, cookie)
 }
 
