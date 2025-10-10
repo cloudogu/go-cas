@@ -255,8 +255,9 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			if glog.V(2) {
 				glog.Infof("Error validating ticket: %v", err)
 			}
-			return // allow ServeHTTP()
+			return // allow ServeHTTP() // allow requests that have coincidentally also a ticket query param. Don't stress other web apps :)
 		} else {
+			//CAS is super happy about the ticket
 			if glog.V(2) {
 				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
 			}
@@ -266,6 +267,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			}
 
 			glog.Infof("3++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
+			// but why deleting?
 			clearCookie(w, cookie)
 		}
 
@@ -282,8 +284,8 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
-	clearCookie(w, cookie)
+	//glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
+	//clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
