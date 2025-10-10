@@ -254,7 +254,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 			glog.Infof("3++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 			// but why deleting?
-			clearCookie(w, cookie)
+			//clearCookie(w, cookie)
 		}
 
 		c.setSession(cookie.Value, ticket)
