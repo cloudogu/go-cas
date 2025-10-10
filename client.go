@@ -227,21 +227,15 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 	cookie := getCookie(w, r)
 
 	if s, ok := c.sessions[cookie.Value]; ok {
+		glog.Infof("++++++++++ session für cookie value %s ist %s", cookie.Value, s)
 		if t, err := c.tickets.Read(s); err == nil {
-			if glog.V(1) {
-				glog.Infof("Re-used ticket %s for %s", s, t.User)
-			}
+			glog.Infof("+++++++++++ Re-used ticket %s for Auth Response %s", s, t.User)
 
 			setAuthenticationResponse(r, t)
 			return
 		} else {
-			if glog.V(2) {
-				glog.Infof("Ticket %v not in %T: %v", s, c.tickets, err)
-			}
-
-			if glog.V(1) {
-				glog.Infof("Clearing ticket %s, no longer exists in ticket store", s)
-			}
+			glog.Infof("Ticket %v not in %T: %v", s, c.tickets, err)
+			glog.Infof("Clearing ticket %s, no longer exists in ticket store", s)
 
 			glog.Infof("2++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 			clearCookie(w, cookie)
@@ -250,19 +244,13 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 	if ticket := r.URL.Query().Get("ticket"); ticket != "" {
 		if err := c.validateTicket(ticket, r); err != nil {
-			if glog.V(2) {
-				glog.Infof("Error validating ticket: %v", err)
-			}
+			glog.Infof("Error validating ticket: %v", err)
 			return // allow ServeHTTP() // allow requests that have coincidentally also a ticket query param. Don't stress other web apps :)
 		} else {
 			//CAS is super happy about the ticket
-			if glog.V(2) {
-				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
-			}
+			glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
 
-			if glog.V(1) {
-				glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
-			}
+			glog.Infof("Clearing ticket %s, no longer exists in ticket store", ticket)
 
 			glog.Infof("3++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
 			// but why deleting?
@@ -272,9 +260,7 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 		c.setSession(cookie.Value, ticket)
 
 		if t, err := c.tickets.Read(ticket); err == nil {
-			if glog.V(1) {
-				glog.Infof("Validated ticket %s for %s", ticket, t.User)
-			}
+			glog.Infof("Validated ticket %s for %s", ticket, t.User)
 
 			setFirstAuthenticatedRequest(r, true)
 			setAuthenticationResponse(r, t)
