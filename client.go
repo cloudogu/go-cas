@@ -151,7 +151,6 @@ func (c *Client) LogoutUrlForRequest(r *http.Request) (string, error) {
 }
 
 // ServiceValidateUrlForRequest determines the CAS serviceValidate URL for the ticket and http.Request.
-// TODO why is this function exposed?
 func (c *Client) ServiceValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
 	service, err := requestURL(r)
 	if err != nil {
@@ -161,7 +160,6 @@ func (c *Client) ServiceValidateUrlForRequest(ticket string, r *http.Request) (s
 }
 
 // ValidateUrlForRequest determines the CAS validate URL for the ticket and http.Request.
-// TODO why is this function exposed?
 func (c *Client) ValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
 	service, err := requestURL(r)
 	if err != nil {
@@ -281,12 +279,11 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 			setFirstAuthenticatedRequest(r, true)
 			setAuthenticationResponse(r, t)
 			return
-		} else {
-			glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
-			clearCookie(w, cookie)
-
 		}
 	}
+
+	glog.Infof("4++++++ Clearing session cookie %s for req %s", cookie.Value, r.URL.String())
+	clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
@@ -300,7 +297,7 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 			Value:    newSessionId(),
 			MaxAge:   86400,
 			HttpOnly: false,
-			Path:     "/",
+			Path:     "/sonar",
 		}
 
 		if glog.V(2) {
@@ -310,6 +307,7 @@ func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
 		glog.Infof("++++++ Setze neuen Cookie %s in req %s", c.Value, r.URL.String())
 
 		r.AddCookie(c) // so we can find it later if required
+
 		http.SetCookie(w, c)
 	}
 
