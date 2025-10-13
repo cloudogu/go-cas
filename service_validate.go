@@ -2,10 +2,12 @@ package cas
 
 import (
 	"fmt"
-	"github.com/golang/glog"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"path"
+
+	"github.com/golang/glog"
 )
 
 // NewServiceTicketValidator create a new *ServiceTicketValidator
