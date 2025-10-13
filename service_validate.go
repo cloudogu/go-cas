@@ -5,23 +5,22 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
 
 	"github.com/golang/glog"
 )
 
 // NewServiceTicketValidator create a new *ServiceTicketValidator
-func NewServiceTicketValidator(client *http.Client, casURL *url.URL) *ServiceTicketValidator {
+func NewServiceTicketValidator(client *http.Client, urlSchema URLScheme) *ServiceTicketValidator {
 	return &ServiceTicketValidator{
-		client: client,
-		casURL: casURL,
+		client:    client,
+		urlSchema: urlSchema,
 	}
 }
 
 // ServiceTicketValidator is responsible for the validation of a service ticket
 type ServiceTicketValidator struct {
-	client *http.Client
-	casURL *url.URL
+	client    *http.Client
+	urlSchema URLScheme
 }
 
 // ValidateTicket validates the service ticket for the given server. The method will try to use the service validate
@@ -93,7 +92,7 @@ func (validator *ServiceTicketValidator) ValidateTicket(serviceURL *url.URL, tic
 // ServiceValidateUrl creates the service validation url for the cas >= 2 protocol.
 // TODO the function is only exposed, because of the clients ServiceValidateUrl function
 func (validator *ServiceTicketValidator) ServiceValidateUrl(serviceURL *url.URL, ticket string) (string, error) {
-	u, err := validator.casURL.Parse(path.Join(validator.casURL.Path, "serviceValidate"))
+	u, err := validator.urlSchema.ServiceValidate()
 	if err != nil {
 		return "", err
 	}
@@ -169,7 +168,7 @@ func (validator *ServiceTicketValidator) validateTicketCas1(serviceURL *url.URL,
 // ValidateUrl creates the validation url for the cas >= 1 protocol.
 // TODO the function is only exposed, because of the clients ValidateUrl function
 func (validator *ServiceTicketValidator) ValidateUrl(serviceURL *url.URL, ticket string) (string, error) {
-	u, err := validator.casURL.Parse(path.Join(validator.casURL.Path, "validate"))
+	u, err := validator.urlSchema.Validate()
 	if err != nil {
 		return "", err
 	}
