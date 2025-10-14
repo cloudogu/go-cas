@@ -55,9 +55,11 @@ func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
 		return false
 	}
 
-	if v := r.FormValue("logoutRequest"); v == "" {
-		return false
-	}
+	/*
+		if v := r.FormValue("logoutRequest"); v == "" {
+			return false
+		}
+	*/
 
 	return true
 }
