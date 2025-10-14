@@ -61,7 +61,7 @@ func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
 		}
 	*/
 
-	return true
+	return false
 }
 
 // performSingleLogout processes a single logout request
