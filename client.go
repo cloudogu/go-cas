@@ -83,28 +83,28 @@ func NewClient(options *Options) *Client {
 	}
 
 	return &Client{
-		tickets:     tickets,
-		client:      client,
-		urlScheme:   urlScheme,
-		cookie:      cookie,
-		sessions:    sessions,
-		sendService: options.SendService,
-		stValidator: NewServiceTicketValidator(client, urlScheme),
+		tickets:         tickets,
+		client:          client,
+		urlScheme:       urlScheme,
+		cookie:          cookie,
+		sessions:        sessions,
+		sendService:     options.SendService,
+		stValidator:     NewServiceTicketValidator(client, urlScheme),
+		isLogoutRequest: options.IsLogoutRequest,
 	}
 }
 
-// CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
-func (c *Client) CreateHandler(h http.Handler) http.Handler {
+// Handle wraps a http.Handler to provide CAS authentication for the handler.
+func (c *Client) Handle(h http.Handler) http.Handler {
 	return &clientHandler{
-		c:               c,
-		h:               h,
-		isLogoutRequest: c.isLogoutRequest,
+		c: c,
+		h: h,
 	}
 }
 
 // HandleFunc wraps a function to provide CAS authentication for the handler function.
 func (c *Client) HandleFunc(h func(http.ResponseWriter, *http.Request)) http.Handler {
-	return c.CreateHandler(http.HandlerFunc(h))
+	return c.Handle(http.HandlerFunc(h))
 }
 
 // requestURL determines an absolute URL from the http.Request.
@@ -376,4 +376,26 @@ func (c *Client) clearSession(w http.ResponseWriter, r *http.Request) {
 // deleteSession removes the session from the client
 func (c *Client) deleteSession(id string) {
 	c.sessions.Delete(id)
+}
+
+// findAndDeleteSessionWithTicket removes the session from the client via Single Log Out
+//
+// When a Single Log Out request is received we receive the service ticket identidier. This
+// function loops through the sessions to find the matching session id. Once retrieved the
+// session is removed from the client. When the session is next requested the getSession
+// function will notice the session is invalid and revalidate the user.
+func (c *Client) findAndDeleteSessionWithTicket(ticket string) {
+	var id string
+	for s, t := range c.sessions.GetAll() {
+		if t == ticket {
+			id = s
+			break
+		}
+	}
+
+	if id == "" {
+		return
+	}
+
+	c.deleteSession(id)
 }

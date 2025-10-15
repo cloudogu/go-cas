@@ -1,12 +1,18 @@
 package cas
 
-import "sync"
+import (
+	"maps"
+	"sync"
+)
 
 // SessionStore store the session's ticket
 // SessionID is retrived from cookies
 type SessionStore interface {
 	// Get the ticket with the session id
 	Get(sessionID string) (string, bool)
+
+	// GetAll returns a copy of all sessions stored
+	GetAll() map[string]string
 
 	// Set the session with a ticket
 	Set(sessionID, ticket string) error
@@ -33,6 +39,10 @@ func (m *memorySessionStore) Get(sessionID string) (string, bool) {
 	m.mu.RUnlock()
 
 	return ticket, ok
+}
+
+func (m *memorySessionStore) GetAll() map[string]string {
+	return maps.Clone(m.sessions)
 }
 
 func (m *memorySessionStore) Set(sessionID, ticket string) error {
