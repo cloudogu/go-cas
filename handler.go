@@ -1,7 +1,6 @@
 package cas
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/golang/glog"
@@ -77,7 +76,7 @@ func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Requ
 	}
 
 	ch.c.findAndDeleteSessionWithTicket(logoutReq.SessionIndex)
+	w.Header().Set("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"")
 
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "OK")
+	w.WriteHeader(http.StatusNoContent)
 }
