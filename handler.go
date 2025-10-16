@@ -76,7 +76,8 @@ func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Requ
 	}
 
 	ch.c.findAndDeleteSessionWithTicket(logoutReq.SessionIndex)
-	w.Header().Set("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"")
+	//w.Header().Set("Clear-Site-Data", "\"cookies\", \"storage\", \"cache\"")
+	w.Header().Set("Clear-Site-Data", "\"storage\", \"cache\"")
 
 	w.WriteHeader(http.StatusNoContent)
 }
