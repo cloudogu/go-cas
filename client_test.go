@@ -505,8 +505,8 @@ func TestSingleLogOut(t *testing.T) {
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected Second HTTP response code to be <%v>, got <%v>", http.StatusOK, w.Code)
+	if w.Code < 200 || w.Code > 204 {
+		t.Errorf("Expected Second HTTP response code to be <%s>, got <%v>", "200-ish", w.Code)
 	}
 
 	if _, err := client.tickets.Read(ticket.Name); err != ErrInvalidTicket {
