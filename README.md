@@ -10,7 +10,7 @@ import "gopkg.in/cas.v2"
 If you are using go modules, get the library by running:
 
 ```
-go get gopkg.in/cas.v2@v2.2.1
+go get gopkg.in/cas.v2@v2.4.0
 ```
 
 ## Examples and Documentation
@@ -32,7 +32,7 @@ package yourpackage
 import (
 	"net/http"
 
-	cas "github.com/cloudogu/go-cas"
+	cas "github.com/cloudogu/go-cas/v2"
 )
 
 func yourCode(next http.Handler) {
