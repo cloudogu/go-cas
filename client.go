@@ -5,18 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sync"
 
 	"github.com/golang/glog"
 )
 
-// Options contain diverse client configuration options.
+// Client configuration options
 type Options struct {
-	URL             *url.URL                   // URL to the CAS service
-	Store           TicketStore                // Custom TicketStore, if nil a MemoryStore will be used
-	Client          *http.Client               // Custom http client to allow options for http connections
-	SendService     bool                       // Custom sendService to determine whether you need to send service param
-	URLScheme       URLScheme                  // Custom url scheme, can be used to modify the request urls for the client
+	URL             *url.URL     // URL to the CAS service
+	Store           TicketStore  // Custom TicketStore, if nil a MemoryStore will be used
+	Client          *http.Client // Custom http client to allow options for http connections
+	SendService     bool         // Custom sendService to determine whether you need to send service param
+	URLScheme       URLScheme    // Custom url scheme, can be used to modify the request urls for the client
+	Cookie          *http.Cookie // http.Cookie options, uses Path, Domain, MaxAge, HttpOnly, & Secure
+	SessionStore    SessionStore
 	IsLogoutRequest func(r *http.Request) bool // Function to check if a request is a logout request
 }
 
@@ -25,9 +26,9 @@ type Client struct {
 	tickets   TicketStore
 	client    *http.Client
 	urlScheme URLScheme
+	cookie    *http.Cookie
 
-	mu          sync.Mutex
-	sessions    map[string]string
+	sessions    SessionStore
 	sendService bool
 
 	stValidator *ServiceTicketValidator
@@ -48,6 +49,13 @@ func NewClient(options *Options) *Client {
 		tickets = &MemoryStore{}
 	}
 
+	var sessions SessionStore
+	if options.SessionStore != nil {
+		sessions = options.SessionStore
+	} else {
+		sessions = NewMemorySessionStore()
+	}
+
 	var urlScheme URLScheme
 	if options.URLScheme != nil {
 		urlScheme = options.URLScheme
@@ -62,34 +70,41 @@ func NewClient(options *Options) *Client {
 		client = &http.Client{}
 	}
 
+	var cookie *http.Cookie
+	if options.Cookie != nil {
+		cookie = options.Cookie
+	} else {
+		cookie = &http.Cookie{
+			MaxAge:   86400,
+			HttpOnly: false,
+			Secure:   false,
+			SameSite: http.SameSiteDefaultMode,
+		}
+	}
+
 	return &Client{
 		tickets:         tickets,
 		client:          client,
 		urlScheme:       urlScheme,
-		sessions:        make(map[string]string),
+		cookie:          cookie,
+		sessions:        sessions,
 		sendService:     options.SendService,
 		stValidator:     NewServiceTicketValidator(client, urlScheme),
 		isLogoutRequest: options.IsLogoutRequest,
 	}
 }
 
-func (c *Client) Logout(w http.ResponseWriter, r *http.Request) {
-	c.clearSession(w, r)
-	c.sessions = map[string]string{}
-}
-
-// CreateHandler wraps an http.Handler to provide CAS authentication for the handler.
-func (c *Client) CreateHandler(h http.Handler) http.Handler {
+// Handle wraps a http.Handler to provide CAS authentication for the handler.
+func (c *Client) Handle(h http.Handler) http.Handler {
 	return &clientHandler{
-		c:               c,
-		h:               h,
-		isLogoutRequest: c.isLogoutRequest,
+		c: c,
+		h: h,
 	}
 }
 
 // HandleFunc wraps a function to provide CAS authentication for the handler function.
 func (c *Client) HandleFunc(h func(http.ResponseWriter, *http.Request)) http.Handler {
-	return c.CreateHandler(http.HandlerFunc(h))
+	return c.Handle(http.HandlerFunc(h))
 }
 
 // requestURL determines an absolute URL from the http.Request.
@@ -100,8 +115,11 @@ func requestURL(r *http.Request) (*url.URL, error) {
 	}
 
 	u.Host = r.Host
-	u.Scheme = "http"
+	if host := r.Header.Get("X-Forwarded-Host"); host != "" {
+		u.Host = host
+	}
 
+	u.Scheme = "http"
 	if scheme := r.Header.Get("X-Forwarded-Proto"); scheme != "" {
 		u.Scheme = scheme
 	} else if r.TLS != nil {
@@ -152,7 +170,6 @@ func (c *Client) LogoutUrlForRequest(r *http.Request) (string, error) {
 }
 
 // ServiceValidateUrlForRequest determines the CAS serviceValidate URL for the ticket and http.Request.
-// TODO why is this function exposed?
 func (c *Client) ServiceValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
 	service, err := requestURL(r)
 	if err != nil {
@@ -162,7 +179,6 @@ func (c *Client) ServiceValidateUrlForRequest(ticket string, r *http.Request) (s
 }
 
 // ValidateUrlForRequest determines the CAS validate URL for the ticket and http.Request.
-// TODO why is this function exposed?
 func (c *Client) ValidateUrlForRequest(ticket string, r *http.Request) (string, error) {
 	service, err := requestURL(r)
 	if err != nil {
@@ -180,7 +196,7 @@ func (c *Client) RedirectToLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if glog.V(2) {
-		glog.Info("Logging out, redirecting client to %v with status %v",
+		glog.Infof("Logging out, redirecting client to %v with status %v",
 			u, http.StatusFound)
 	}
 
@@ -188,7 +204,7 @@ func (c *Client) RedirectToLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, u, http.StatusFound)
 }
 
-// RedirectToLogout replies to the request with a redirect URL to authenticate with CAS.
+// RedirectToLogin replies to the request with a redirect URL to authenticate with CAS.
 func (c *Client) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 	u, err := c.LoginUrlForRequest(r)
 	if err != nil {
@@ -205,12 +221,12 @@ func (c *Client) RedirectToLogin(w http.ResponseWriter, r *http.Request) {
 
 // validateTicket performs CAS ticket validation with the given ticket and service.
 func (c *Client) validateTicket(ticket string, service *http.Request) error {
-	serviceUrl, err := requestURL(service)
+	serviceURL, err := requestURL(service)
 	if err != nil {
 		return err
 	}
 
-	success, err := c.stValidator.ValidateTicket(serviceUrl, ticket)
+	success, err := c.stValidator.ValidateTicket(serviceURL, ticket)
 	if err != nil {
 		return err
 	}
@@ -227,9 +243,9 @@ func (c *Client) validateTicket(ticket string, service *http.Request) error {
 // A cookie is set on the response if one is not provided with the request.
 // Validates the ticket if the URL parameter is provided.
 func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
-	cookie := getCookie(w, r)
+	cookie := c.getCookie(w, r)
 
-	if s, ok := c.sessions[cookie.Value]; ok {
+	if s, ok := c.sessions.Get(cookie.Value); ok {
 		if t, err := c.tickets.Read(s); err == nil {
 			if glog.V(1) {
 				glog.Infof("Re-used ticket %s for %s", s, t.User)
@@ -256,6 +272,17 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 				glog.Infof("Error validating ticket: %v", err)
 			}
 			return // allow ServeHTTP()
+		}
+
+		c.setSession(cookie.Value, ticket)
+
+		if t, err := c.tickets.Read(ticket); err == nil {
+			if glog.V(1) {
+				glog.Infof("Validated ticket %s for %s", ticket, t.User)
+			}
+
+			setAuthenticationResponse(r, t)
+			return
 		} else {
 			if glog.V(2) {
 				glog.Infof("Ticket %v not in %T: %v", ticket, c.tickets, err)
@@ -267,50 +294,39 @@ func (c *Client) getSession(w http.ResponseWriter, r *http.Request) {
 
 			clearCookie(w, cookie)
 		}
-
-		c.setSession(cookie.Value, ticket)
-
-		if t, err := c.tickets.Read(ticket); err == nil {
-			if glog.V(1) {
-				glog.Infof("Validated ticket %s for %s", ticket, t.User)
-			}
-
-			setFirstAuthenticatedRequest(r, true)
-			setAuthenticationResponse(r, t)
-			return
-		}
 	}
-
-	clearCookie(w, cookie)
 }
 
 // getCookie finds or creates the session cookie on the response.
-func getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
-	c, err := r.Cookie(sessionCookieName)
+func (c *Client) getCookie(w http.ResponseWriter, r *http.Request) *http.Cookie {
+	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		// NOTE: Intentionally not enabling HttpOnly so the cookie can
 		//       still be used by Ajax requests.
-		c = &http.Cookie{
+		cookie = &http.Cookie{
 			Name:     sessionCookieName,
-			Value:    newSessionId(),
-			MaxAge:   86400,
-			HttpOnly: false,
-			Path:     "/",
+			Value:    newSessionID(),
+			Path:     c.cookie.Path,
+			Domain:   c.cookie.Domain,
+			MaxAge:   c.cookie.MaxAge,
+			HttpOnly: c.cookie.HttpOnly,
+			Secure:   c.cookie.Secure,
+			SameSite: c.cookie.SameSite,
 		}
 
 		if glog.V(2) {
-			glog.Infof("Setting %v cookie with value: %v", c.Name, c.Value)
+			glog.Infof("Setting %v cookie with value: %v", cookie.Name, cookie.Value)
 		}
 
-		r.AddCookie(c) // so we can find it later if required
-		http.SetCookie(w, c)
+		r.AddCookie(cookie) // so we can find it later if required
+		http.SetCookie(w, cookie)
 	}
 
-	return c
+	return cookie
 }
 
 // newSessionId generates a new opaque session identifier for use in the cookie.
-func newSessionId() string {
+func newSessionID() string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	// generate 64 character string
@@ -336,24 +352,22 @@ func (c *Client) setSession(id string, ticket string) {
 		glog.Infof("Recording session, %v -> %v", id, ticket)
 	}
 
-	c.mu.Lock()
-	c.sessions[id] = ticket
-	c.mu.Unlock()
+	c.sessions.Set(id, ticket)
 }
 
 // clearSession removes the session from the client and clears the cookie.
 func (c *Client) clearSession(w http.ResponseWriter, r *http.Request) {
-	cookie := getCookie(w, r)
+	cookie := c.getCookie(w, r)
 
-	if s, ok := c.sessions[cookie.Value]; ok {
-		if err := c.tickets.Delete(s); err != nil {
+	if serviceTicket, ok := c.sessions.Get(cookie.Value); ok {
+		if err := c.tickets.Delete(serviceTicket); err != nil {
 			fmt.Printf("Failed to remove %v from %T: %v\n", cookie.Value, c.tickets, err)
 			if glog.V(2) {
 				glog.Errorf("Failed to remove %v from %T: %v", cookie.Value, c.tickets, err)
 			}
 		}
 
-		c.deleteSession(s)
+		c.deleteSession(cookie.Value)
 	}
 
 	clearCookie(w, cookie)
@@ -361,9 +375,7 @@ func (c *Client) clearSession(w http.ResponseWriter, r *http.Request) {
 
 // deleteSession removes the session from the client
 func (c *Client) deleteSession(id string) {
-	c.mu.Lock()
-	delete(c.sessions, id)
-	c.mu.Unlock()
+	c.sessions.Delete(id)
 }
 
 // findAndDeleteSessionWithTicket removes the session from the client via Single Log Out
@@ -374,7 +386,7 @@ func (c *Client) deleteSession(id string) {
 // function will notice the session is invalid and revalidate the user.
 func (c *Client) findAndDeleteSessionWithTicket(ticket string) {
 	var id string
-	for s, t := range c.sessions {
+	for s, t := range c.sessions.GetAll() {
 		if t == ticket {
 			id = s
 			break

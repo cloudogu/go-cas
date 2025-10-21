@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v2.4.0] - 2025-10-21
+### Changed
+- Merge upstream changes from original repo into this fork
+- Revert changes made to the handler as they are not needed
+- Extend SessionStore to return all sessions
+
+### Fixed
+- Use the right ID when deleting session on logout
+
 ## [v2.3.1] - 2025-10-09
 ### Fixed
 - Delete session map to avoid missing cas-session cookie creation 
