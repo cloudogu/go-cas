@@ -1,7 +1,6 @@
 package cas
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/golang/glog"
@@ -13,9 +12,8 @@ const (
 
 // clientHandler handles CAS Protocol HTTP requests
 type clientHandler struct {
-	c               *Client
-	h               http.Handler
-	isLogoutRequest func(r *http.Request) bool
+	c *Client
+	h http.Handler
 }
 
 // ServeHTTP handles HTTP requests, processes CAS requests
@@ -42,8 +40,8 @@ func (ch *clientHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 //
 // The rules for a SLO request are, HTTP POST urlencoded form with a logoutRequest parameter.
 func (ch *clientHandler) isSingleLogoutRequest(r *http.Request) bool {
-	if ch.isLogoutRequest != nil {
-		return ch.isLogoutRequest(r)
+	if isLogoutRequest := ch.c.isLogoutRequest; isLogoutRequest != nil {
+		return isLogoutRequest(r)
 	}
 
 	if r.Method != "POST" {
@@ -77,8 +75,7 @@ func (ch *clientHandler) performSingleLogout(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ch.c.deleteSession(logoutReq.SessionIndex)
+	ch.c.findAndDeleteSessionWithTicket(logoutReq.SessionIndex)
 
-	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintln(w, "OK")
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -1,4 +1,4 @@
-package cas_test
+package cas
 
 import (
 	"bytes"
@@ -9,8 +9,6 @@ import (
 	"net/url"
 
 	"github.com/golang/glog"
-
-	"gopkg.in/cas.v1"
 )
 
 type myHandler struct{}
@@ -40,7 +38,7 @@ func Example() {
 	m.Handle("/", MyHandler)
 
 	url, _ := url.Parse(casURL)
-	client := cas.NewClient(&cas.Options{
+	client := NewClient(&Options{
 		URL: url,
 	})
 
@@ -58,46 +56,46 @@ func Example() {
 
 type templateBinding struct {
 	Username   string
-	Attributes cas.UserAttributes
+	Attributes UserAttributes
 }
 
 func (h *myHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !cas.IsAuthenticated(r) {
-		cas.RedirectToLogin(w, r)
+	if !IsAuthenticated(r) {
+		RedirectToLogin(w, r)
 		return
 	}
 
 	if r.URL.Path == "/logout" {
-		cas.RedirectToLogout(w, r)
+		RedirectToLogout(w, r)
 		return
 	}
 
 	w.Header().Add("Content-Type", "text/html")
 
-	tmpl, err := template.New("index.html").Parse(index_html)
+	tmpl, err := template.New("index.html").Parse(indexHTML)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, error_500, err)
+		fmt.Fprintf(w, error500, err)
 		return
 	}
 
 	binding := &templateBinding{
-		Username:   cas.Username(r),
-		Attributes: cas.Attributes(r),
+		Username:   Username(r),
+		Attributes: Attributes(r),
 	}
 
 	html := new(bytes.Buffer)
 	if err := tmpl.Execute(html, binding); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, error_500, err)
+		fmt.Fprintf(w, error500, err)
 		return
 	}
 
 	html.WriteTo(w)
 }
 
-const index_html = `<!DOCTYPE html>
+const indexHTML = `<!DOCTYPE html>
 <html>
   <head>
     <title>Welcome {{.Username}}</title>
@@ -116,7 +114,7 @@ const index_html = `<!DOCTYPE html>
 </html>
 `
 
-const error_500 = `<!DOCTYPE html>
+const error500 = `<!DOCTYPE html>
 <html>
   <head>
     <title>Error 500</title>
